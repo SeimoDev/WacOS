@@ -18,6 +18,8 @@ public sealed class MissionControlModel
     public List<WindowInfo> Windows { get; init; } = new();                 // every app window, top-most first
     public Dictionary<IntPtr, Guid> WindowSpace { get; init; } = new();
     public HashSet<IntPtr> Pinned { get; init; } = new();
+    /// <summary>Windows hidden by WacOS (stowed in the Stage Manager strip). They belong to the space and are shown.</summary>
+    public HashSet<IntPtr> Parked { get; init; } = new();
     public string? FrontAppKey { get; init; }
     public string? FrontAppName { get; init; }
 }
@@ -188,14 +190,14 @@ public sealed class MissionControlService
 
     public void Close() => CloseAnimated(IntPtr.Zero);
 
-    private void CloseAnimated(IntPtr activate)
+    private void CloseAnimated(IntPtr activate, Action? then = null)
     {
         if (!_open || _closing) return;
         _closing = true;
         int pending = _windows.Count;
-        if (pending == 0) { CloseNow(); return; }
+        if (pending == 0) { CloseNow(); then?.Invoke(); return; }
         foreach (var w in _windows.Values.ToArray())
-            w.BeginExit(activate, () => { if (--pending == 0) CloseNow(); });
+            w.BeginExit(activate, () => { if (--pending == 0) { CloseNow(); then?.Invoke(); } });
     }
 
     private void CloseNow()
@@ -241,6 +243,13 @@ public sealed class MissionControlService
             App.Activate(hwnd);
             return;
         }
+        if (App.StageManager.IsStowed(hwnd))
+        {
+            // A window from the strip: it flies to its place on the stage while the current stage set flies to the
+            // strip; when the overview is gone, Stage Manager swaps the real windows without a second animation.
+            CloseAnimated(hwnd, () => { App.StageManager.RequestActivate(hwnd, animate: false); App.Activate(hwnd); });
+            return;
+        }
         // Activate underneath the overlay first, then let the thumbnails fly back onto the real windows.
         App.StageManager.RequestActivate(hwnd);
         App.Activate(hwnd);
@@ -255,12 +264,13 @@ public sealed class MissionControlService
         var windows = WindowEnumerator.GetWindows(includeMinimized: true, includeOtherDesktops: true);
         var spaceOf = new Dictionary<IntPtr, Guid>();
         var pinned = new HashSet<IntPtr>();
+        var parked = new HashSet<IntPtr>();
         foreach (var w in windows.ToList())
         {
             if (w.IsCloaked && Cloak.IsHidden(w.Hwnd))
             {
-                // Hidden by WacOS (Stage Manager strip / Show Desktop): behaves like a minimized window of this space.
-                w.IsCloaked = false; w.IsMinimized = true; spaceOf[w.Hwnd] = cur;
+                // Hidden by WacOS (stowed in the Stage Manager strip): still a window of this space, shown like any other.
+                w.IsCloaked = false; spaceOf[w.Hwnd] = cur; parked.Add(w.Hwnd);
             }
             else if (w.IsCloaked)
             {
@@ -271,7 +281,7 @@ public sealed class MissionControlService
         }
         return new MissionControlModel
         {
-            Spaces = spaces, CurrentSpace = cur, Windows = windows, WindowSpace = spaceOf, Pinned = pinned,
+            Spaces = spaces, CurrentSpace = cur, Windows = windows, WindowSpace = spaceOf, Pinned = pinned, Parked = parked,
             FrontAppKey = fgInfo?.AppKey, FrontAppName = fgInfo?.AppName,
         };
     }

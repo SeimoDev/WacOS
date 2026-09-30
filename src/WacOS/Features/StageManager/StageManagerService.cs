@@ -439,7 +439,45 @@ public sealed class StageManagerService
         }, holdMs: 50, opacityEase: Easing.OutCubic);
     }
 
-    public void BringToStage(MonitorInfo mon, WindowSet set, IReadOnlyDictionary<IntPtr, Flyer.Ghost>? carried = null)
+    // ---- queries used by Mission Control, which shows stowed windows too ----
+
+    public bool IsStowed(IntPtr hwnd) => _enabled && Cloak.IsHidden(hwnd) && FindStripSet(hwnd, out _, out _) != null;
+
+    private WindowSet? FindStripSet(IntPtr hwnd, out StageState? state, out MonitorInfo? mon)
+    {
+        state = null; mon = null;
+        var cur = _vd.CurrentId;
+        foreach (var ((space, monHandle), st) in _states)
+        {
+            if (space != cur) continue;
+            var set = st.Strip.FirstOrDefault(x => x.Contains(hwnd));
+            if (set != null) { state = st; mon = Monitors.Get(monHandle); return set; }
+        }
+        return null;
+    }
+
+    /// <summary>Screen rectangle of the strip item that holds a stowed window (null when it has no visible item).</summary>
+    public RECT? StripSlotOf(IntPtr hwnd)
+    {
+        var set = FindStripSet(hwnd, out _, out var mon);
+        if (set == null || mon == null || !_strips.TryGetValue(mon.Handle, out var strip) || !strip.HasSlot(set)) return null;
+        return strip.SlotRectFlat(set);
+    }
+
+    public RECT? TopSlot(MonitorInfo mon) => _strips.TryGetValue(mon.Handle, out var strip) ? strip.SlotRectFlat(null) : null;
+
+    /// <summary>Where a stowed window will sit once it is back on the stage.</summary>
+    public RECT StageFrameOf(IntPtr hwnd)
+    {
+        var set = FindStripSet(hwnd, out _, out var mon);
+        return set != null && mon != null ? TargetFrame(set, hwnd, mon) : Dwm.GetFrameBounds(hwnd);
+    }
+
+    public IReadOnlyCollection<IntPtr> SetWindowsOf(IntPtr hwnd) => FindStripSet(hwnd, out _, out _)?.Windows.ToList() ?? new List<IntPtr>();
+
+    public IReadOnlyCollection<IntPtr> StageWindows(MonitorInfo mon) => GetState(mon, build: false).Stage?.Windows.ToList() ?? new List<IntPtr>();
+
+    public void BringToStage(MonitorInfo mon, WindowSet set, IReadOnlyDictionary<IntPtr, Flyer.Ghost>? carried = null, bool animate = true)
     {
         if (!_enabled) { if (carried != null) foreach (var g in carried.Values) Flyer.Remove(g); return; }
         var st = GetState(mon, build: true);
@@ -449,9 +487,9 @@ public sealed class StageManagerService
         st.Strip.Remove(set);
         var old = st.Stage;
         st.Stage = set; st.DesktopRevealed = false;
-        if (old != null && !old.IsEmpty) { st.Strip.Insert(0, old); ParkSet(old, mon, animate: true); }
+        if (old != null && !old.IsEmpty) { st.Strip.Insert(0, old); ParkSet(old, mon, animate: animate); }
         RenderStrip(mon);
-        UnparkWindows(set, set.Windows.ToList(), mon, animate: true, activate: true, fromSlot, () => st.Stage == set, carried);
+        UnparkWindows(set, set.Windows.ToList(), mon, animate: animate, activate: true, fromSlot, () => st.Stage == set, carried);
     }
 
     public void MergeToStage(MonitorInfo mon, WindowSet set, IReadOnlyDictionary<IntPtr, Flyer.Ghost>? carried = null)
@@ -1150,12 +1188,12 @@ public sealed class StageManagerService
     }
 
     /// <summary>Called by Mission Control before activating a window so its set comes to the stage.</summary>
-    public void RequestActivate(IntPtr hwnd)
+    public void RequestActivate(IntPtr hwnd, bool animate = true)
     {
         if (!_enabled) return;
         var st = StateFor(hwnd, out var mon); if (st == null || mon == null) return;
         var set = st.Strip.FirstOrDefault(s => s.Contains(hwnd));
-        if (set != null) { set.MoveToFront(hwnd); BringToStage(mon, set); }
+        if (set != null) { set.MoveToFront(hwnd); BringToStage(mon, set, null, animate); }
     }
 
     // ---- spring-loading: hold a drag over a thumbnail to bring its windows forward ----

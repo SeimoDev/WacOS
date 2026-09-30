@@ -320,6 +320,14 @@ public sealed class StripWindow : Window
         return new RECT(Monitor.Bounds.Left + (int)(r.X * Scale), Monitor.Bounds.Top + (int)(r.Y * Scale), Monitor.Bounds.Left + (int)((r.X + r.Width) * Scale), Monitor.Bounds.Top + (int)((r.Y + r.Height) * Scale));
     }
 
+    /// <summary>The un-tilted slot rectangle in screen pixels, wherever the strip currently is (a flat picture lands here).</summary>
+    public RECT SlotRectFlat(WindowSet? set)
+    {
+        var it = set == null ? null : _items.FirstOrDefault(i => i.Set == set);
+        Rect f = it?.Rect ?? (_items.Count > 0 ? _items[0].Rect : new Rect(EdgeMarginDip, (Height - ThumbHeightDip) / 2, ThumbWidthDip, ThumbHeightDip));
+        return new RECT(Monitor.Bounds.Left + (int)(f.X * Scale), Monitor.Bounds.Top + (int)(f.Y * Scale), Monitor.Bounds.Left + (int)((f.X + f.Width) * Scale), Monitor.Bounds.Top + (int)((f.Y + f.Height) * Scale));
+    }
+
     public bool HasSlot(WindowSet set) => _items.Any(i => i.Set == set);
 
     public WindowSet? SetAtScreenPoint(int x, int y)

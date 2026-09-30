@@ -490,7 +490,12 @@ public sealed class MissionControlWindow : OverlayWindow
             t.Thumbs[i] = th;
             var target = Sub(t, i, Px(t.Target));
             if (th == null) { AddPlaceholder(t); continue; }
-            if (kind == EnterKind.FromDesktop && !w.IsMinimized) th.Set(Rel(w.Bounds), 255);
+            if (kind == EnterKind.FromDesktop && _model.Parked.Contains(w.Hwnd))
+            {
+                var slot = App.StageManager.StripSlotOf(w.Hwnd);
+                th.Set(slot is { } sr ? Rel(Anim.Fit(sr, w.Bounds.Width, w.Bounds.Height)) : Shrink(target, 0.8), (byte)(slot != null ? 200 : 0));
+            }
+            else if (kind == EnterKind.FromDesktop && !w.IsMinimized) th.Set(Rel(w.Bounds), 255);
             else if (kind == EnterKind.FromDesktop) th.Set(Shrink(target, 0.8), 0);
             else th.Set(target, 0);
         }
@@ -603,12 +608,25 @@ public sealed class MissionControlWindow : OverlayWindow
         var front = _tileList.FirstOrDefault(t => t.Windows.Any(w => w.Hwnd == activate));
         if (front != null) BringToFront(front);
         var targets = new List<(Thumb, RECT, byte)>();
+        bool activateIsParked = activate != IntPtr.Zero && App.StageManager.IsStowed(activate);
+        var activateSet = activateIsParked ? App.StageManager.SetWindowsOf(activate) : null;
+        var leaving = activateIsParked ? App.StageManager.StageWindows(Monitor) : (IReadOnlyCollection<IntPtr>)Array.Empty<IntPtr>();
         foreach (var t in _tileList)
             for (int i = 0; i < t.Windows.Count; i++)
             {
                 if (t.Thumbs[i] is not { } th) continue;
                 var h = t.Windows[i].Hwnd;
-                if (!User32.IsWindow(h) || User32.IsIconic(h) || Dwm.GetCloaked(h) != 0) targets.Add((th, Shrink(th.Current, 0.8), 0));
+                bool parked = App.StageManager.IsStowed(h);
+                bool chosen = h == activate || (activateSet != null && activateSet.Contains(h));
+                if (!User32.IsWindow(h) || User32.IsIconic(h)) targets.Add((th, Shrink(th.Current, 0.8), 0));
+                else if (parked && chosen) targets.Add((th, Rel(App.StageManager.StageFrameOf(h)), 255));
+                else if (parked || (activateIsParked && leaving.Contains(h)))
+                {
+                    var slot = App.StageManager.StripSlotOf(h) ?? App.StageManager.TopSlot(Monitor);
+                    var f = Dwm.GetFrameBounds(h);
+                    targets.Add(slot is { } sr ? (th, Rel(Anim.Fit(sr, f.Width, f.Height)), (byte)0) : (th, Shrink(th.Current, 0.8), (byte)0));
+                }
+                else if (Dwm.GetCloaked(h) != 0) targets.Add((th, Shrink(th.Current, 0.8), 0));
                 else targets.Add((th, Rel(Dwm.GetFrameBounds(h)), 255));
             }
         double c0 = _chrome;
