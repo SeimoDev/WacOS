@@ -99,8 +99,8 @@ internal interface IVirtualDesktop
 {
     bool IsViewVisible(IApplicationView view);
     Guid GetId();
-    [return: MarshalAs(UnmanagedType.HString)] string GetName();
-    [return: MarshalAs(UnmanagedType.HString)] string GetWallpaperPath();
+    IntPtr GetName();            // HSTRING (the runtime cannot marshal HSTRING; see HString helper)
+    IntPtr GetWallpaperPath();   // HSTRING
     bool IsRemote();
 }
 
@@ -120,11 +120,11 @@ internal interface IVirtualDesktopManagerInternal
     void RemoveDesktop(IVirtualDesktop desktop, IVirtualDesktop fallback);
     IVirtualDesktop FindDesktop(ref Guid desktopid);
     void GetDesktopSwitchIncludeExcludeViews(IVirtualDesktop desktop, out IObjectArray unknown1, out IObjectArray unknown2);
-    void SetDesktopName(IVirtualDesktop desktop, [MarshalAs(UnmanagedType.HString)] string name);
-    void SetDesktopWallpaper(IVirtualDesktop desktop, [MarshalAs(UnmanagedType.HString)] string path);
-    void UpdateWallpaperPathForAllDesktops([MarshalAs(UnmanagedType.HString)] string path);
+    void SetDesktopName(IVirtualDesktop desktop, IntPtr /* HSTRING */ name);
+    void SetDesktopWallpaper(IVirtualDesktop desktop, IntPtr /* HSTRING */ path);
+    void UpdateWallpaperPathForAllDesktops(IntPtr /* HSTRING */ path);
     void CopyDesktopState(IApplicationView pView0, IApplicationView pView1);
-    void CreateRemoteDesktop([MarshalAs(UnmanagedType.HString)] string path, out IVirtualDesktop desktop);
+    void CreateRemoteDesktop(IntPtr /* HSTRING */ path, out IVirtualDesktop desktop);
     void SwitchRemoteDesktop(IVirtualDesktop desktop, IntPtr switchtype);
     void SwitchDesktopWithAnimation(IVirtualDesktop desktop);
     void GetLastActiveDesktop(out IVirtualDesktop desktop);
@@ -161,4 +161,23 @@ internal interface IObjectArray
 internal interface IServiceProvider10
 {
     [return: MarshalAs(UnmanagedType.IUnknown)] object QueryService(ref Guid service, ref Guid riid);
+}
+
+/// <summary>Manual HSTRING handling (WinRT strings) for the shell interfaces above.</summary>
+internal static class HString
+{
+    [DllImport("combase.dll", CharSet = CharSet.Unicode)] private static extern int WindowsCreateString(string source, int length, out IntPtr hstring);
+    [DllImport("combase.dll")] private static extern int WindowsDeleteString(IntPtr hstring);
+    [DllImport("combase.dll")] private static extern IntPtr WindowsGetStringRawBuffer(IntPtr hstring, out uint length);
+
+    public static IntPtr Create(string s) { WindowsCreateString(s, s.Length, out var h); return h; }
+    public static void Free(IntPtr h) { if (h != IntPtr.Zero) WindowsDeleteString(h); }
+
+    /// <summary>Reads and releases an HSTRING returned by a COM call.</summary>
+    public static string Take(IntPtr h)
+    {
+        if (h == IntPtr.Zero) return "";
+        try { var p = WindowsGetStringRawBuffer(h, out uint len); return p == IntPtr.Zero ? "" : Marshal.PtrToStringUni(p, (int)len) ?? ""; }
+        finally { WindowsDeleteString(h); }
+    }
 }

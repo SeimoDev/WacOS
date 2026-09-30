@@ -8,7 +8,7 @@ namespace WacOS.VirtualDesktops;
 public sealed record Space(Guid Id, int Index, string RawName, string WallpaperPath)
 {
     /// <summary>macOS-style display name: user-provided name, otherwise "Desktop N".</summary>
-    public string DisplayName => string.IsNullOrWhiteSpace(RawName) ? $"Desktop {Index + 1}" : RawName;
+    public string DisplayName => string.IsNullOrWhiteSpace(RawName) ? L.F("Desktop {0}", Index + 1) : RawName;
 }
 
 /// <summary>
@@ -123,8 +123,8 @@ public sealed class VirtualDesktopService : IDisposable
             arr.GetAt(i, ref iid, out object o);
             var d = (IVirtualDesktop)o;
             string name = "", wp = "";
-            try { name = d.GetName() ?? ""; } catch { }
-            try { wp = d.GetWallpaperPath() ?? ""; } catch { }
+            try { name = HString.Take(d.GetName()); } catch { }
+            try { wp = HString.Take(d.GetWallpaperPath()); } catch { }
             list.Add(new Space(d.GetId(), i, name, wp));
         }
         return (IReadOnlyList<Space>)list;
@@ -164,8 +164,13 @@ public sealed class VirtualDesktopService : IDisposable
 
     public void SwitchTo(Space space, bool animated = true) => SwitchTo(space.Id, animated);
 
-    public void SwitchTo(Guid id, bool animated = true) => Guard(() =>
+    /// <summary>When WacOS itself last asked for a switch, and whether that was because an app was activated.</summary>
+    public long LastOwnSwitchTick { get; private set; }
+    public bool LastOwnSwitchWasActivation { get; private set; }
+
+    public void SwitchTo(Guid id, bool animated = true, bool byActivation = false) => Guard(() =>
     {
+        LastOwnSwitchTick = Environment.TickCount64; LastOwnSwitchWasActivation = byActivation;
         var d = _internal!.FindDesktop(ref id);
         if (animated) { try { _internal.SwitchDesktopWithAnimation(d); } catch { _internal.SwitchDesktop(d); } }
         else _internal.SwitchDesktop(d);
@@ -212,11 +217,12 @@ public sealed class VirtualDesktopService : IDisposable
     }
 
     /// <summary>Removes a space; its windows go to the space on its left (Desktop 1 if it is the first).</summary>
-    public bool Remove(Space space)
+    public bool Remove(Space space, Space? moveWindowsTo = null)
     {
         var spaces = GetSpaces();
         if (spaces.Count <= 1) return false;
-        var fallback = space.Index > 0 ? spaces[space.Index - 1] : spaces[1];
+        var fallback = moveWindowsTo != null && moveWindowsTo.Id != space.Id && spaces.Any(x => x.Id == moveWindowsTo.Id)
+            ? moveWindowsTo : space.Index > 0 ? spaces[space.Index - 1] : spaces[1];
         var ok = Guard(() =>
         {
             Guid a = space.Id, b = fallback.Id;
@@ -235,13 +241,13 @@ public sealed class VirtualDesktopService : IDisposable
 
     public void Rename(Space space, string name)
     {
-        Guard(() => { Guid a = space.Id; _internal!.SetDesktopName(_internal.FindDesktop(ref a), name); return true; }, false);
+        Guard(() => { Guid a = space.Id; var h = HString.Create(name); try { _internal!.SetDesktopName(_internal.FindDesktop(ref a), h); } finally { HString.Free(h); } return true; }, false);
         SpacesChanged?.Invoke();
     }
 
     public void SetWallpaper(Space space, string path)
     {
-        Guard(() => { Guid a = space.Id; _internal!.SetDesktopWallpaper(_internal.FindDesktop(ref a), path); return true; }, false);
+        Guard(() => { Guid a = space.Id; var h = HString.Create(path); try { _internal!.SetDesktopWallpaper(_internal.FindDesktop(ref a), h); } finally { HString.Free(h); } return true; }, false);
         SpacesChanged?.Invoke();
     }
 
