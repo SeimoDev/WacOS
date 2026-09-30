@@ -20,6 +20,7 @@ public sealed class SpacesFeature
     private readonly HashSet<IntPtr> _assignedOnce = new();
     private readonly DispatcherTimer _fsTimer;
     private long _lastSwitch;
+    private IntPtr _lastFsLog;
 
     public SpacesFeature(VirtualDesktopService vd, WindowTracker tracker, HotkeyService hotkeys, TouchpadGestureService gestures, MouseService mouse)
     {
@@ -44,7 +45,7 @@ public sealed class SpacesFeature
         _tracker.WindowDestroyed += OnWindowDestroyed;
         _tracker.LocationChanged += OnLocationChanged;
 
-        _fsTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(700) };
+        _fsTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(400) };
         _fsTimer.Tick += (_, _) => ScanFullscreen();
         _fsTimer.Start();
     }
@@ -106,15 +107,28 @@ public sealed class SpacesFeature
     private void OnCurrentChanged(Space? old, Space now)
     {
         var s = App.Settings.Current;
-        if (s.AutoRearrangeSpaces && now.Index != 0 && !_suppressRearrange)
+        if (!s.AutoRearrangeSpaces || old == null || _suppressRearrange) return;
+        // Like macOS, Spaces are only rearranged when the switch happened because an app on another Space was
+        // activated. Moving between Spaces yourself (shortcut, swipe, Mission Control) never changes their order –
+        // otherwise every Space you go to would jump to the front and "move left" would stop working.
+        bool ours = Environment.TickCount64 - _vd.LastOwnSwitchTick < 1500;
+        if (ours && !_vd.LastOwnSwitchWasActivation) return;
+        if (!ours && (User32.IsKeyDown(User32.VK_LWIN) || User32.IsKeyDown(User32.VK_RWIN) || App.MissionControl.IsOpen)) return; // Win+Ctrl+arrow, Task View
+        if (Math.Abs(now.Index - old.Index) <= 1) return;   // already next to the Space we came from
+        _suppressRearrange = true;
+        // Defer a little so the switch animation finishes before the order changes.
+        Anim.After(450, () =>
         {
-            _suppressRearrange = true;
-            // Defer a little so the switch animation finishes before the bar reorders.
-            App.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+            try
             {
-                try { _vd.Move(now, 0); } finally { _suppressRearrange = false; }
-            });
-        }
+                var spaces = _vd.GetSpaces();
+                var from = spaces.FirstOrDefault(x => x.Id == old.Id); var to = spaces.FirstOrDefault(x => x.Id == now.Id);
+                if (from == null || to == null) return;
+                // The Space just used moves next to the one the user came from.
+                _vd.Move(to, to.Index > from.Index ? from.Index + 1 : from.Index - 1);
+            }
+            finally { _suppressRearrange = false; }
+        });
     }
     private bool _suppressRearrange;
 
@@ -144,7 +158,7 @@ public sealed class SpacesFeature
     private void OnWindowDestroyed(IntPtr hwnd)
     {
         _assignedOnce.Remove(hwnd);
-        if (_fullscreenSpaces.Remove(hwnd, out var spaceId)) RemoveAutoSpace(spaceId);
+        if (_fullscreenSpaces.Remove(hwnd, out var spaceId)) RemoveAutoSpace(spaceId, _fullscreenOrigin.GetValueOrDefault(hwnd));
         _fullscreenOrigin.Remove(hwnd);
     }
 
@@ -186,7 +200,7 @@ public sealed class SpacesFeature
         if (Dwm.GetCloaked(hwnd) == Dwm.DWM_CLOAKED_SHELL && !_vd.IsWindowPinned(hwnd))
         {
             var id = _vd.GetWindowSpaceId(hwnd);
-            if (id != Guid.Empty && id != _vd.Current?.Id) _vd.SwitchTo(id);
+            if (id != Guid.Empty && id != _vd.Current?.Id) _vd.SwitchTo(id, byActivation: true);
         }
     }
 
@@ -210,37 +224,61 @@ public sealed class SpacesFeature
                     if (wi != null && _fullscreenOrigin.TryGetValue(kv.Key, out var origin))
                     {
                         var originSpace = _vd.GetSpaces().FirstOrDefault(s => s.Id == origin);
-                        if (originSpace != null) { _vd.MoveWindowToSpace(kv.Key, originSpace); if (fg == kv.Key) _vd.SwitchTo(originSpace); }
+                        if (originSpace != null)
+                        {
+                            // The app comes back to the space it left, and stays the active window there.
+                            bool wasHere = fg == kv.Key || _vd.Current?.Id == kv.Value;
+                            _vd.MoveWindowToSpace(kv.Key, originSpace);
+                            if (wasHere)
+                            {
+                                var back = kv.Key;
+                                _vd.SwitchTo(originSpace);
+                                Anim.After(350, () => { if (User32.IsWindow(back)) App.Activate(back); });
+                            }
+                        }
                     }
-                    _fullscreenOrigin.Remove(kv.Key);
-                    RemoveAutoSpace(kv.Value);
+                    _fullscreenOrigin.Remove(kv.Key, out var originId);
+                    RemoveAutoSpace(kv.Value, originId);
                 }
             }
-            // 2) the foreground window just went full-screen → give it a space named after the app
-            if (fg != IntPtr.Zero && !_fullscreenSpaces.ContainsKey(fg))
+            // 2) a window on this space went full-screen → give it a space named after the app.
+            //    The foreground window is checked first; other windows are covered too, because a window that
+            //    goes full screen is not always the foreground window at the moment of the scan.
+            var candidates = new List<WindowInfo>();
+            var fgInfo = fg != IntPtr.Zero ? WindowEnumerator.Describe(fg) : null;
+            if (fgInfo != null) candidates.Add(fgInfo);
+            candidates.AddRange(WindowEnumerator.GetWindows(includeMinimized: false).Where(w => w.Hwnd != fg));
+            foreach (var wi in candidates)
             {
-                var wi = WindowEnumerator.Describe(fg);
-                if (wi != null && wi.IsFullscreen && !_vd.IsWindowPinned(fg) && _vd.GetSpaces().Count < VirtualDesktopService.MaxSpaces)
-                {
-                    var cur = _vd.Current; if (cur == null) return;
-                    // Don't do it for the shell / lock screen / our own.
-                    if (wi.ClassName is "Progman" or "WorkerW" or "Windows.UI.Core.CoreWindow") return;
-                    var space = _vd.Create(); if (space == null) return;
-                    _vd.Rename(space, wi.AppName);
-                    _fullscreenOrigin[fg] = cur.Id; _fullscreenSpaces[fg] = space.Id;
-                    _vd.MoveWindowToSpace(fg, space);
-                    _vd.SwitchTo(space);
-                    App.Activate(fg);
-                }
+                var h = wi.Hwnd;
+                if (_fullscreenSpaces.ContainsKey(h) || !wi.IsFullscreen) continue;
+                if (wi.ClassName is "Progman" or "WorkerW" or "Windows.UI.Core.CoreWindow") continue;   // shell, lock screen
+                if (_vd.IsWindowPinned(h) || _vd.GetSpaces().Count >= VirtualDesktopService.MaxSpaces) continue;
+                var cur = _vd.Current; if (cur == null) return;
+                var space = _vd.Create(); if (space == null) return;
+                Log.Info($"'{wi.AppName}' went full screen: moved to its own space");
+                _vd.Rename(space, wi.AppName);
+                // Like macOS, the new space sits directly to the right of the one the app came from.
+                if (space.Index != cur.Index + 1) _vd.Move(space, cur.Index + 1);
+                _fullscreenOrigin[h] = cur.Id; _fullscreenSpaces[h] = space.Id;
+                _vd.MoveWindowToSpace(h, space);
+                _vd.SwitchTo(space);
+                App.Activate(h);
+                break;   // one per scan
             }
         }
         catch (Exception ex) { Log.Error("fullscreen scan", ex); }
     }
 
-    private void RemoveAutoSpace(Guid id)
+    /// <summary>Drops a full-screen space; anything left on it goes back to the space the app came from.</summary>
+    private void RemoveAutoSpace(Guid id, Guid originId)
     {
-        var sp = _vd.GetSpaces().FirstOrDefault(s => s.Id == id);
-        if (sp != null) _vd.Remove(sp);
+        var spaces = _vd.GetSpaces();
+        var sp = spaces.FirstOrDefault(s => s.Id == id);
+        if (sp == null) return;
+        var origin = spaces.FirstOrDefault(s => s.Id == originId);
+        Log.Info($"full-screen space '{sp.DisplayName}' removed");
+        _vd.Remove(sp, origin);
     }
 
     public bool IsAutoFullscreenSpace(Guid id) => _fullscreenSpaces.ContainsValue(id);
