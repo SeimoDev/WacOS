@@ -21,6 +21,7 @@ public sealed class SpacesFeature
     private readonly DispatcherTimer _fsTimer;
     private long _lastSwitch;
     private IntPtr _lastFsLog;
+    private readonly Dictionary<IntPtr, int> _fullscreenMisses = new();
 
     public SpacesFeature(VirtualDesktopService vd, WindowTracker tracker, HotkeyService hotkeys, TouchpadGestureService gestures, MouseService mouse)
     {
@@ -217,8 +218,21 @@ public sealed class SpacesFeature
             // 1) windows that left full-screen (or got minimized) → return them and drop their space
             foreach (var kv in _fullscreenSpaces.ToList())
             {
-                var wi = WindowEnumerator.Describe(kv.Key, includeOtherDesktops: true);
-                if (wi == null || !wi.IsFullscreen)
+                WindowInfo? wi = null;
+                if (User32.IsWindow(kv.Key))
+                {
+                    // Only judge the window while the user is looking at its space. Seen from another space it is
+                    // hidden (and some apps minimise or drop out of full screen when they lose focus), which must
+                    // not be mistaken for "left full screen" – that would send it back to the space the user is on.
+                    if (_vd.CurrentId != kv.Value) continue;
+                    wi = WindowEnumerator.Describe(kv.Key);
+                    if (wi == null || wi.IsMinimized) continue;
+                    if (wi.IsFullscreen) { _fullscreenMisses.Remove(kv.Key); continue; }
+                    int misses = _fullscreenMisses.GetValueOrDefault(kv.Key) + 1;
+                    _fullscreenMisses[kv.Key] = misses;
+                    if (misses < 2) continue;   // transitions (e.g. switching video quality) flicker for a moment
+                }
+                _fullscreenMisses.Remove(kv.Key);
                 {
                     _fullscreenSpaces.Remove(kv.Key);
                     if (wi != null && _fullscreenOrigin.TryGetValue(kv.Key, out var origin))
