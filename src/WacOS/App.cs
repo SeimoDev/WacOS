@@ -18,6 +18,7 @@ public sealed class App : Application
     public static new App Current => (App)Application.Current;
     public static SettingsStore Settings { get; } = new();
     public static bool ForceStageManager { get; set; }
+    public static bool OpenSettingsAtStart { get; set; }
 
     public static VirtualDesktopService Desktops { get; private set; } = null!;
     public static WindowTracker Tracker { get; private set; } = null!;
@@ -47,7 +48,9 @@ public sealed class App : Application
         Desktops = new VirtualDesktopService();
         Cloak.RecoverFromJournal();   // a crashed session must never leave windows hidden
         EdgeSnap.RecoverFromCrash();
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => { try { Cloak.ShowAll(); EdgeSnap.Suspend(false); } catch { } };
+        ApplyTouchpadBlock();
+        Settings.Changed += ApplyTouchpadBlock;
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => { try { Cloak.ShowAll(); EdgeSnap.Suspend(false); SystemTouchpadGestures.Restore(); } catch { } };
         Tracker = new WindowTracker();
         Hooks = new LowLevelHooks();
         Hotkeys = new HotkeyService(Hooks);
@@ -71,7 +74,7 @@ public sealed class App : Application
         else DesktopIcons.SetVisible(Settings.Current.ShowItemsOnDesktop);
 
         if (!Desktops.IsAvailable)
-            MessageBox.Show("WacOS could not connect to the Windows virtual desktop service.\nThis build of Windows may be unsupported (Windows 11 24H2 / 25H2 required).",
+            MessageBox.Show(L.T("WacOS could not connect to the Windows virtual desktop service.\nThis build of Windows may be unsupported (Windows 11 24H2 / 25H2 required)."),
                 "WacOS", MessageBoxButton.OK, MessageBoxImage.Warning);
 
         if (!Settings.Current.FirstRunDone)
@@ -79,6 +82,7 @@ public sealed class App : Application
             Settings.Update(s => s.FirstRunDone = true);
             OpenSettings();
         }
+        else if (OpenSettingsAtStart) OpenSettings();
     }
 
     /// <summary>
@@ -92,6 +96,14 @@ public sealed class App : Application
         if (User32.GetForegroundWindow() == hwnd) return;
         if (Desktops.ActivateView(hwnd) && User32.GetForegroundWindow() == hwnd) return;
         User32.ForceForeground(hwnd);
+    }
+
+    private static void ApplyTouchpadBlock()
+    {
+        var s = Settings.Current;
+        bool three = s.SwipeBetweenSpacesFingers == 3 || s.MissionControlGestureFingers == 3;
+        bool four = s.SwipeBetweenSpacesFingers == 4 || s.MissionControlGestureFingers == 4 || s.ShowDesktopGesture || s.LaunchpadGesture;
+        SystemTouchpadGestures.Apply(s.BlockWindowsTouchpadGestures, three, four);
     }
 
     public void OpenSettings()
@@ -111,7 +123,7 @@ public sealed class App : Application
     {
         if (Elevation.IsElevated) return;
         if (Elevation.Relaunch(new[] { "--no-elevate", "--wait-pid", Environment.ProcessId.ToString() })) Quit();
-        else System.Windows.MessageBox.Show("WacOS could not be started as administrator.", "WacOS");
+        else System.Windows.MessageBox.Show(L.T("WacOS could not be started as administrator."), "WacOS");
     }
 
     public void Quit()
@@ -120,6 +132,7 @@ public sealed class App : Application
         {
             StageManager.Shutdown();          // synchronous: restores every parked window (the on/off setting is kept)
             Cloak.ShowAll();
+            SystemTouchpadGestures.Restore();
             DesktopIcons.SetVisible(true);
             MissionControl.Shutdown();
             Tray.Dispose();
