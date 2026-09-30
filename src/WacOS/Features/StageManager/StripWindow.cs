@@ -384,7 +384,7 @@ public sealed class StripWindow : Window
         ZoomItem(item, 1.08);
         _canvas.Cursor = Cursors.Hand;
         var set = item.Set;
-        _canvas.ToolTip = set.Windows.Count > 1 ? $"{set.AppName} – {set.Windows.Count} windows" : (set.Info.GetValueOrDefault(set.Front)?.Title ?? set.AppName);
+        _canvas.ToolTip = set.Windows.Count > 1 ? L.F("{0} – {1} windows", set.AppName, set.Windows.Count) : (set.Info.GetValueOrDefault(set.Front)?.Title ?? set.AppName);
     }
 
     private static void ZoomItem(Item it, double s)

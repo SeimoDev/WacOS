@@ -19,6 +19,9 @@ public static class Program
         if (args.Contains("--selftest")) return SelfTest();
         if (args.Contains("--verbose")) Log.Verbose = true;
         App.ForceStageManager = args.Contains("--stage");
+        App.OpenSettingsAtStart = args.Contains("--settings");
+        int langAt = Array.IndexOf(args, "--lang");
+        if (langAt >= 0 && langAt + 1 < args.Length) L.Override = args[langAt + 1];
 
         if (args.Contains("--quit"))
         {
@@ -55,7 +58,7 @@ public static class Program
         catch (UnauthorizedAccessException) { mutex = null!; created = false; }   // an elevated instance owns it
         if (!created)
         {
-            System.Windows.MessageBox.Show("WacOS is already running (see the tray icon).", "WacOS");
+            System.Windows.MessageBox.Show(L.T("WacOS is already running (see the tray icon)."), "WacOS");
             return 0;
         }
         using var mutexHold = mutex;

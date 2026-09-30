@@ -300,7 +300,7 @@ public sealed class MissionControlWindow : OverlayWindow
         stack.Children.Add(thumb);
         var name = new TextBlock { Text = "+", Foreground = Brushes.White, FontSize = 14, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 6) };
         stack.Children.Add(name);
-        var border = new Border { Child = stack, Background = Brushes.Transparent, Cursor = Cursors.Hand, ToolTip = "Add a new desktop" };
+        var border = new Border { Child = stack, Background = Brushes.Transparent, Cursor = Cursors.Hand, ToolTip = L.T("Add a new desktop") };
         item.Element = border; item.Thumb = thumb; item.ThumbHost = thumb; item.Name = name; item.Close = new Border();
         return item;
     }
@@ -650,7 +650,7 @@ public sealed class MissionControlWindow : OverlayWindow
     {
         var sp = new StackPanel { Orientation = Orientation.Horizontal };
         if (t.Primary.Icon != null) sp.Children.Add(new Image { Source = t.Primary.Icon, Width = 20, Height = 20, Margin = new Thickness(0, 0, 8, 0) });
-        string text = t.Windows.Count > 1 ? $"{t.Primary.AppName} – {t.Windows.Count} windows" : t.Primary.Title;
+        string text = t.Windows.Count > 1 ? L.F("{0} – {1} windows", t.Primary.AppName, t.Windows.Count) : t.Primary.Title;
         sp.Children.Add(new TextBlock { Text = text, Foreground = Brushes.White, FontSize = 13.5, MaxWidth = 460, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, FontFamily = new FontFamily("Segoe UI") });
         _label.Child = sp;
         _label.Visibility = Visibility.Visible;
