@@ -18,7 +18,7 @@ public static class SystemTouchpadGestures
     private static readonly string Backup = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WacOS", "touchpad-gestures.bak");
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint msg, IntPtr wParam, string? lParam, uint flags, uint timeout, out IntPtr result);
+    private static extern bool SendNotifyMessage(IntPtr hWnd, uint msg, IntPtr wParam, string? lParam);
 
     /// <summary>Blocks the system swipes for the finger counts WacOS uses (or restores them when block is false).</summary>
     public static void Apply(bool block, bool three, bool four)
@@ -81,7 +81,8 @@ public static class SystemTouchpadGestures
 
     private static void Notify()
     {
-        // The input stack re-reads the touchpad settings on this broadcast.
-        SendMessageTimeout(new IntPtr(0xFFFF), User32.WM_SETTINGCHANGE, IntPtr.Zero, "PrecisionTouchPad", 0x0002, 500, out _);
+        // The input stack re-reads the touchpad settings on this broadcast. It is posted, not sent: a synchronous
+        // broadcast waits on every top-level window and can stall start-up and exit for seconds.
+        SendNotifyMessage(new IntPtr(0xFFFF), User32.WM_SETTINGCHANGE, IntPtr.Zero, "PrecisionTouchPad");
     }
 }
