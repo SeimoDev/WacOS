@@ -20,7 +20,7 @@ public sealed class StripWindow : Window
 {
     public const double StripWidthDip = 214, ThumbWidthDip = 176, GapDip = 24, EdgeMarginDip = 18;
     private const double TiltDegrees = 48;       // how far the thumbnails are turned towards the stage (macOS: roughly 45–50°)
-    private const double CameraDistance = 540;   // smaller = stronger perspective (the far edge ends up ~80 % as tall as the near one)
+    private const double CameraDistance = 1250;  // smaller = stronger perspective; here the far edge is ~90 % as tall as the near one, as on macOS
     private const double Pad = 26;               // transparent border in the texture for shadows, badges and the fan
 
     public MonitorInfo Monitor { get; }
