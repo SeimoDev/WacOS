@@ -124,3 +124,7 @@ staggered windows; Show Desktop accelerates windows off screen and springs them 
   Mission Control / Stage Manager, not independent desktops per display.
 * "Hide app" (⌘H) has no Windows equivalent; Split View from Mission Control is out of scope.
 * Full‑screen‑as‑a‑space is emulated by moving the full‑screen window to a new desktop.
+
+## License
+
+WacOS is free software, released under the [GNU General Public License v3.0](LICENSE).

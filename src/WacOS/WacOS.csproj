@@ -17,6 +17,7 @@
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <Version>1.0.1</Version>
     <Authors>WacOS</Authors>
+    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
     <Description>macOS Spaces, Mission Control and Stage Manager for Windows 11</Description>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <NoWarn>$(NoWarn);CA1416;CS8618;WFO1000</NoWarn>

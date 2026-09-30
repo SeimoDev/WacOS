@@ -238,3 +238,9 @@ src/WacOS
   Tray/              托盘图标与菜单
 docs/macOS-Feature-Inventory.md   macOS 特性清单与实现对照
 ```
+
+---
+
+## 许可证
+
+WacOS 是自由软件，以 [GNU 通用公共许可证第 3 版（GPL-3.0）](LICENSE) 发布。
