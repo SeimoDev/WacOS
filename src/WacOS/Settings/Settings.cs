@@ -102,7 +102,9 @@ public sealed class AppSettings
     public bool AppExposeGesture { get; set; } = true;
     public bool ShowDesktopGesture { get; set; } = true;        // spread with thumb and three fingers
     public bool LaunchpadGesture { get; set; } = false;         // pinch → Start menu
-    public bool NaturalSwipeDirection { get; set; } = true;     // swipe left → space on the right (macOS default)
+    public bool NaturalSwipeDirection { get; set; } = true;
+    /// <summary>Set Windows' own three/four-finger swipes to "Nothing" while WacOS handles those gestures.</summary>
+    public bool BlockWindowsTouchpadGestures { get; set; } = true;     // swipe left → space on the right (macOS default)
     public bool MagicMouseEmulation { get; set; } = false;      // horizontal wheel / Shift+wheel switches spaces
     public double SwipeSensitivity { get; set; } = 1.0;
 
@@ -125,6 +127,8 @@ public sealed class AppSettings
     public bool RunAsAdministrator { get; set; } = false;
     public bool VerboseLogging { get; set; } = false;
     public bool FirstRunDone { get; set; } = false;
+    /// <summary>UI language: "auto" (follow the system), "en", "zh-Hans", "zh-Hant" or "ja".</summary>
+    public string Language { get; set; } = "auto";
 }
 
 public sealed class SettingsStore
