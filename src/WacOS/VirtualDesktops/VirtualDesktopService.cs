@@ -75,6 +75,7 @@ public sealed class VirtualDesktopService : IDisposable
             {
                 Log.Warn("Shell COM connection lost, reinitialising"); _internal = null;
             }
+            catch (COMException ex) when ((uint)ex.HResult == 0x8002802B) { return fallback; }   // the window has no shell view (normal for some windows)
             catch (Exception ex) { Log.Error("Virtual desktop call failed", ex); return fallback; }
         }
         return fallback;
@@ -141,8 +142,8 @@ public sealed class VirtualDesktopService : IDisposable
 
     public int CurrentIndex => Current?.Index ?? 0;
 
-    /// <summary>Id of the current desktop as last seen by the poll (no COM call; at most ~120 ms behind a switch).</summary>
-    public Guid CurrentId => _lastCurrent;
+    /// <summary>Id of the current desktop, asked from the shell each time (never stale after a switch).</summary>
+    public Guid CurrentId => Guard(() => _internal!.GetCurrentDesktop().GetId(), _lastCurrent);
 
     public Guid GetWindowSpaceId(IntPtr hwnd) => Guard(() =>
     {

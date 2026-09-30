@@ -218,7 +218,7 @@ public sealed class StageManagerService
         var sets = new List<WindowSet>();
         foreach (var w in windows)
         {
-            if (_unmanageable.Contains(w.Hwnd)) continue;
+            if (_unmanageable.Contains(w.Hwnd) || !OnCurrentSpace(w.Hwnd)) continue;
             var set = allAtOnce ? sets.FirstOrDefault(s => s.AppKey == w.AppKey) : null;
             if (set == null) { set = new WindowSet(); sets.Add(set); }
             set.Add(w, front: false);
@@ -230,6 +230,17 @@ public sealed class StageManagerService
         // Park back-to-front so the ghosts keep the real stacking while they fly into the strip.
         foreach (var s in Enumerable.Reverse(st.Strip)) ParkSet(s, mon, animate: true);
         if (stage != null) foreach (var h in stage.Windows) EnsureRightOfStrip(h, mon);
+    }
+
+    /// <summary>
+    /// True when the window belongs to the space the user is on. Stage Manager state is kept per space, so a window of
+    /// another space must never be filed under (or animated on) the current one.
+    /// </summary>
+    private bool OnCurrentSpace(IntPtr hwnd)
+    {
+        var id = _vd.GetWindowSpaceId(hwnd);
+        if (id == Guid.Empty || id == _vd.CurrentId) return true;
+        return _vd.IsWindowPinned(hwnd);   // shown on all desktops
     }
 
     private StageState? StateFor(IntPtr hwnd, out MonitorInfo? mon)
@@ -632,6 +643,7 @@ public sealed class StageManagerService
         var st = GetState(mon, build: true);
         if (st.FindSet(wi.Hwnd) != null) return;
         if (wi.IsFullscreen || _unmanageable.Contains(wi.Hwnd)) return;
+        if (!OnCurrentSpace(wi.Hwnd)) return;
         Log.Debug($"new window {wi.Hwnd:X} '{wi.Title}' key={wi.AppKey}");
         bool allAtOnce = App.Settings.Current.ShowWindowsFromApplication == ShowWindowsMode.AllAtOnce;
         if (st.Stage != null && allAtOnce && st.Stage.AppKey == wi.AppKey)
@@ -691,7 +703,17 @@ public sealed class StageManagerService
         // Drop dead windows.
         foreach (var set in st.AllSets.ToList())
         {
-            foreach (var h in set.Windows.ToList()) if (!User32.IsWindow(h)) set.Remove(h);
+            foreach (var h in set.Windows.ToList())
+            {
+                if (!User32.IsWindow(h)) { set.Remove(h); continue; }
+                if (!OnCurrentSpace(h))
+                {
+                    // Moved to another space (by the user, or because it went full screen): it is that space's window now.
+                    Log.Debug($"window {h:X} left this space");
+                    set.Remove(h);
+                    Cloak.ReleaseElsewhere(h);
+                }
+            }
             if (set.IsEmpty) { st.Strip.Remove(set); if (st.Stage == set) st.Stage = null; }
         }
         // Items whose windows are still flying towards them stay invisible until the ghosts land.
@@ -813,6 +835,7 @@ public sealed class StageManagerService
         if (Environment.TickCount64 < _suppressForegroundUntil) return;
         var wi = WindowEnumerator.Describe(hwnd, includeOtherDesktops: true);
         if (wi == null || (wi.IsCloaked && !Cloak.Tracks(hwnd))) { EvaluateStrips(); return; }
+        if (!OnCurrentSpace(hwnd)) return;   // it lives on another space: handled after the switch to that space
         Log.Debug($"foreground {hwnd:X} '{wi.Title}' hidden={wi.IsCloaked}");
         var st = StateFor(hwnd, out var mon); if (st == null || mon == null) return;
         if (st.Stage != null && st.Stage.Contains(hwnd)) { st.Stage.MoveToFront(hwnd); st.Stage.Info[hwnd] = wi; EvaluateStrips(); return; }
@@ -830,7 +853,7 @@ public sealed class StageManagerService
     private void OnShellUncloaked(IntPtr hwnd)
     {
         if (!_enabled || _overlayOpen || !Cloak.Tracks(hwnd)) return;   // our own reveals are untracked before they happen
-        if (!User32.IsWindow(hwnd) || Dwm.GetCloaked(hwnd) != 0) return;
+        if (!User32.IsWindow(hwnd) || Dwm.GetCloaked(hwnd) != 0 || !OnCurrentSpace(hwnd)) return;
         var mon = Monitors.FromWindow(hwnd); if (mon == null) return;
         var st = GetState(mon, build: false);
         var set = st.Strip.FirstOrDefault(x => x.Contains(hwnd));
@@ -904,7 +927,7 @@ public sealed class StageManagerService
         if (Environment.TickCount64 < _suppressForegroundUntil) return;   // our own swap animation is moving windows
         var mon = Monitors.FromWindow(hwnd); if (mon == null) return;
         var st = GetState(mon, build: false);
-        if (st.Stage == null || !st.Stage.Contains(hwnd) || User32.IsIconic(hwnd)) return;
+        if (st.Stage == null || !st.Stage.Contains(hwnd) || User32.IsIconic(hwnd) || !OnCurrentSpace(hwnd)) return;
         var frame = Dwm.GetFrameBounds(hwnd);
         User32.GetCursorPos(out var cp);
         if (!Inflate(frame, (int)(80 * mon.Scale)).Contains(cp.X, cp.Y)) return;   // moved by a program, not by the pointer
@@ -1103,7 +1126,11 @@ public sealed class StageManagerService
     private void OnSpaceChanged()
     {
         if (!_enabled) return;
+        CancelDragWatch(); CancelThumbDrag();
+        _pendingParks.RemoveAll(p => { foreach (var g in p.ghosts) Flyer.Remove(g); return true; });
         foreach (var mon in Monitors.All()) { GetState(mon, build: true); RenderStrip(mon); }
+        // Whatever is active on the space we arrived at takes its stage.
+        Delay(200, () => OnForeground(User32.GetForegroundWindow()));
         // The desktop switch made the shell recompute its own cloak flag: put ours back on the windows in the strip.
         Anim.After(250, Cloak.Reinforce);
     }

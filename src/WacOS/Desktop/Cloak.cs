@@ -50,6 +50,19 @@ public static class Cloak
         return false;
     }
 
+    /// <summary>
+    /// Stops hiding a window that now lives on another desktop. Only our own flag is cleared; the desktop flag is left
+    /// to the shell, so the window does not pop up on the desktop the user is looking at.
+    /// </summary>
+    public static void ReleaseElsewhere(IntPtr hwnd)
+    {
+        bool tracked;
+        lock (_hidden) tracked = _hidden.Remove(hwnd);
+        if (!tracked) return;
+        if (User32.IsWindow(hwnd)) App.Desktops.SetViewCloak(hwnd, AppCloak, 0);
+        Save();
+    }
+
     private static void Reveal(IntPtr hwnd)
     {
         App.Desktops.SetViewCloak(hwnd, DesktopCloak, 0);
