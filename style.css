@@ -1,0 +1,49 @@
+/* WacOS website — one quiet screen. No dependencies. */
+:root {
+  --paper: #f6f4ef; --ink: #1c1b1f; --soft: #77747c; --hair: rgba(28,27,31,.16);
+  --serif: "Songti SC", "Noto Serif SC", "Source Han Serif SC", "STSong", "SimSun", Georgia, "Times New Roman", serif;
+  --sans: "Segoe UI Variable Text", "Segoe UI", -apple-system, "PingFang SC", "Microsoft YaHei UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --paper: #131215; --ink: #ece9e2; --soft: #8d8a92; --hair: rgba(236,233,226,.18); }
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { display: grid; grid-template-rows: auto 1fr auto; background: var(--paper); color: var(--ink);
+  font: 15px/1.6 var(--sans); -webkit-font-smoothing: antialiased; overflow: hidden; }
+a { color: inherit; text-decoration: none; }
+button { font: inherit; color: var(--soft); background: none; border: 0; padding: 0; cursor: pointer; letter-spacing: .08em; }
+button:hover, footer a:hover { color: var(--ink); }
+
+header, footer { display: flex; justify-content: space-between; align-items: center; padding: 28px clamp(24px, 5vw, 56px);
+  font-size: 13px; color: var(--soft); letter-spacing: .08em; }
+.brand { color: var(--ink); font-weight: 600; letter-spacing: .14em; }
+
+main { display: grid; place-content: center; justify-items: center; text-align: center; padding: 0 24px; gap: 0; }
+
+/* the mark: a window in the middle, a space leaning in on either side */
+.mark { display: flex; align-items: center; gap: 14px; height: 54px; margin-bottom: clamp(32px, 6vh, 64px); perspective: 240px; }
+.mark i { display: block; width: 46px; height: 32px; border: 1px solid var(--hair); border-radius: 5px; transition: transform 1.1s cubic-bezier(.2,.9,.2,1), border-color .6s; }
+.mark i:nth-child(1) { transform: rotateY(52deg); transform-origin: right center; }
+.mark i:nth-child(3) { transform: rotateY(-52deg); transform-origin: left center; }
+.mark i:nth-child(2) { width: 74px; height: 50px; border-color: var(--ink); border-radius: 7px; }
+.mark:hover i:nth-child(1), .mark:hover i:nth-child(3) { transform: none; border-color: var(--soft); }
+
+h1 { margin: 0; font: 400 clamp(2.6rem, 8.2vw, 6rem)/1.15 var(--serif); letter-spacing: .06em; }
+h1 span { display: inline-block; }
+main p { margin: clamp(18px, 3vh, 30px) 0 clamp(30px, 5vh, 52px); color: var(--soft); font-size: clamp(.95rem, 1.5vw, 1.08rem); letter-spacing: .04em; max-width: 32em; }
+
+.cta { display: inline-flex; align-items: center; gap: .7em; padding: 0 0 6px; font-size: 1rem; letter-spacing: .2em; border-bottom: 1px solid var(--ink); }
+.cta .arrow { transition: transform .45s cubic-bezier(.2,.9,.2,1); letter-spacing: 0; }
+.cta:hover .arrow { transform: translateX(6px); }
+
+/* a gentle entrance */
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+.mark, h1, main p, .cta { animation: rise 1s cubic-bezier(.2,.9,.2,1) both; }
+h1 { animation-delay: .08s; } main p { animation-delay: .18s; } .cta { animation-delay: .28s; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* Latin text reads better a little tighter */
+:lang(en) h1 { letter-spacing: -.01em; font-style: italic; }
+:lang(en) .cta { letter-spacing: .12em; }

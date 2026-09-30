@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WacOS — 站中间，串两边</title>
+<meta name="description" content="WacOS：把 macOS 的多桌面、调度中心与台前调度带到 Windows 11。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231c1b1f'/%3E%3Cpath d='M14 20h7v24h-7zM28.5 20h7v24h-7zM43 20h7v24h-7zM14 38h36v6H14z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <span class="brand">WacOS</span>
+  <button id="lang" aria-label="Language">EN</button>
+</header>
+
+<main>
+  <!-- the idea in three strokes: one window in the middle, a space on either side -->
+  <div class="mark" aria-hidden="true"><i></i><i></i><i></i></div>
+
+  <h1><span data-i18n="s1">站中间，</span><span data-i18n="s2">串两边。</span></h1>
+  <p data-i18n="sub">macOS 的多桌面、调度中心与台前调度，在 Windows 11 上。</p>
+  <a class="cta" href="https://github.com/SeimoDev/WacOS/releases/latest"><span data-i18n="cta">下载</span><span class="arrow" aria-hidden="true">→</span></a>
+</main>
+
+<footer>
+  <span data-i18n="req">Windows 11 24H2 及以上</span>
+  <a href="https://github.com/SeimoDev/WacOS">GitHub</a>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
