@@ -36,10 +36,18 @@ Command-line switches:
 | `--selftest` | Prints the detected spaces, monitors and windows (with capture results) and exits. Use it to check a new Windows build. |
 | `--verbose` | Debug logging to `%AppData%\WacOS\wacos.log`. |
 | `--stage` | Start with Stage Manager on (ignores the saved setting). |
+| `--lang <code>` | UI language for this run: `en`, `zh-Hans`, `zh-Hant`, `ja`. |
+| `--settings` | Open the Settings window at start. |
 | `--quit` | Asks the running instance to quit gracefully (restores windows, hooks and desktop icons). |
 
 WacOS runs in the system tray. Left‑click the icon = Mission Control, right‑click = menu (Stage Manager toggle,
 Spaces list, "Assign app to…", Settings). The Settings window opens on first run.
+
+## Languages
+
+The tray menu, Settings window, tooltips and dialogs are available in English, Simplified Chinese, Traditional Chinese
+and Japanese. The language follows the system by default and can be changed in Settings → General. Translations live
+in one table, `src/WacOS/Localization/Strings.cs`, keyed by the English text.
 
 ## Default shortcuts and gestures (identical to macOS)
 
