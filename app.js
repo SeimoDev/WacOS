@@ -15,7 +15,7 @@
   // Keep real text nodes (not pseudo-content) for selection and accessibility.
   function setLocalizedText(el, text) {
     el.textContent = text;
-    if (lang !== "zh" || !el.matches("h1 [data-i18n]")) return;
+    if (lang !== "zh" || !el.matches("h1 [data-i18n], main p[data-i18n]")) return;
     const match = text.match(/([\uFF0C\u3002\uFF01\uFF1F\uFF1B\uFF1A\u3001])$/u);
     if (!match) return;
     const punctuation = document.createElement("span");
