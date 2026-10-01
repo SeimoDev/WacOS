@@ -47,3 +47,16 @@ h1 { animation-delay: .08s; } main p { animation-delay: .18s; } .cta { animation
 /* Latin text reads better a little tighter */
 :lang(en) h1 { letter-spacing: -.01em; font-style: italic; }
 :lang(en) .cta { letter-spacing: .12em; }
+
+
+/* CJK optical centering: compensate for the empty right half of terminal
+   punctuation without changing the text or applying a viewport-specific nudge.
+   Each slogan fragment works independently when it wraps onto its own line. */
+:lang(zh) h1 .optical-punctuation {
+  display: inline-block;
+  inline-size: .5em;
+  letter-spacing: 0;
+  text-align: start;
+  vertical-align: baseline;
+  overflow: visible;
+}
